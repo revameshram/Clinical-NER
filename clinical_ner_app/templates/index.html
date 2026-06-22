@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Clinical Entity Linker</title>
+  <style>
+    /* ── RESET & BASE ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg         : #0f1117;
+      --surface    : #1a1d27;
+      --surface2   : #22263a;
+      --border     : #2e3250;
+      --text       : #e8eaf6;
+      --text-dim   : #8890b5;
+      --accent     : #6c8cff;
+      --chem-bg    : #0d2b45;
+      --chem-text  : #60b4ff;
+      --chem-border: #1a5c8a;
+      --dis-bg     : #2d1035;
+      --dis-text   : #d98aff;
+      --dis-border : #6b2fa0;
+      --green      : #34d399;
+      --radius     : 8px;
+      --font-mono  : 'Courier New', monospace;
+    }
+
+    body {
+      background   : var(--bg);
+      color        : var(--text);
+      font-family  : -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size    : 15px;
+      line-height  : 1.6;
+      min-height   : 100vh;
+    }
+
+    /* ── LAYOUT ───────────────────────────────────────────────── */
+    .wrapper {
+      max-width  : 900px;
+      margin     : 0 auto;
+      padding    : 2rem 1.5rem 4rem;
+    }
+
+    /* ── HEADER ───────────────────────────────────────────────── */
+    header {
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .header-tag {
+      font-size    : 11px;
+      font-weight  : 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color        : var(--accent);
+      margin-bottom: 0.5rem;
+    }
+
+    header h1 {
+      font-size  : 28px;
+      font-weight: 700;
+      color      : var(--text);
+      margin-bottom: 0.4rem;
+    }
+
+    header p {
+      color    : var(--text-dim);
+      font-size: 14px;
+    }
+
+    /* ── INPUT SECTION ────────────────────────────────────────── */
+    .input-section { margin-bottom: 1.5rem; }
+
+    .input-label {
+      display      : block;
+      font-size    : 12px;
+      font-weight  : 600;
+      color        : var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.5rem;
+    }
+
+    textarea {
+      width        : 100%;
+      background   : var(--surface);
+      border       : 1px solid var(--border);
+      border-radius: var(--radius);
+      color        : var(--text);
+      font-size    : 14px;
+      line-height  : 1.7;
+      padding      : 1rem;
+      resize       : vertical;
+      min-height   : 140px;
+      outline      : none;
+      transition   : border-color 0.2s;
+      font-family  : inherit;
+    }
+
+    textarea:focus { border-color: var(--accent); }
+    textarea::placeholder { color: var(--text-dim); }
+
+    /* ── BUTTONS ──────────────────────────────────────────────── */
+    .btn-row {
+      display  : flex;
+      gap      : 0.75rem;
+      margin-top: 0.75rem;
+    }
+
+    .btn {
+      border       : none;
+      border-radius: var(--radius);
+      cursor       : pointer;
+      font-size    : 14px;
+      font-weight  : 600;
+      padding      : 0.6rem 1.4rem;
+      transition   : opacity 0.15s, transform 0.1s;
+    }
+
+    .btn:hover   { opacity: 0.88; }
+    .btn:active  { transform: scale(0.97); }
+
+    .btn-primary {
+      background: var(--accent);
+      color     : #fff;
+    }
+
+    .btn-secondary {
+      background: var(--surface2);
+      color     : var(--text-dim);
+      border    : 1px solid var(--border);
+    }
+
+    /* Example notes dropdown */
+    .examples {
+      margin-top : 0.6rem;
+      font-size  : 12px;
+      color      : var(--text-dim);
+    }
+
+    .examples span { margin-right: 0.4rem; }
+
+    .example-btn {
+      background   : none;
+      border       : 1px solid var(--border);
+      border-radius: 4px;
+      color        : var(--accent);
+      cursor       : pointer;
+      font-size    : 11px;
+      padding      : 2px 8px;
+      margin-right : 4px;
+      transition   : background 0.15s;
+    }
+
+    .example-btn:hover { background: var(--surface2); }
+
+    /* ── LOADER ───────────────────────────────────────────────── */
+    #loader {
+      display    : none;
+      align-items: center;
+      gap        : 0.6rem;
+      color      : var(--text-dim);
+      font-size  : 13px;
+      margin-top : 1rem;
+    }
+
+    .spinner {
+      width : 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── HIGHLIGHTED TEXT ─────────────────────────────────────── */
+    #highlighted-section { display: none; margin-bottom: 1.5rem; }
+
+    .section-label {
+      font-size    : 11px;
+      font-weight  : 600;
+      color        : var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.5rem;
+    }
+
+    #highlighted-text {
+      background   : var(--surface);
+      border       : 1px solid var(--border);
+      border-radius: var(--radius);
+      padding      : 1rem 1.1rem;
+      font-size    : 14px;
+      line-height  : 2;
+    }
+
+    .ent-chem {
+      background   : var(--chem-bg);
+      color        : var(--chem-text);
+      border       : 1px solid var(--chem-border);
+      border-radius: 4px;
+      padding      : 1px 6px;
+      font-weight  : 500;
+      cursor       : pointer;
+      position     : relative;
+    }
+
+    .ent-dis {
+      background   : var(--dis-bg);
+      color        : var(--dis-text);
+      border       : 1px solid var(--dis-border);
+      border-radius: 4px;
+      padding      : 1px 6px;
+      font-weight  : 500;
+      cursor       : pointer;
+    }
+
+    .ent-label {
+      font-size    : 9px;
+      font-weight  : 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-left  : 4px;
+      opacity      : 0.75;
+    }
+
+    /* ── RESULTS TABLE ────────────────────────────────────────── */
+    #results-section { display: none; }
+
+    .results-header {
+      display        : flex;
+      justify-content: space-between;
+      align-items    : center;
+      margin-bottom  : 0.5rem;
+    }
+
+    .count-badge {
+      background   : var(--surface2);
+      border       : 1px solid var(--border);
+      border-radius: 20px;
+      color        : var(--text-dim);
+      font-size    : 12px;
+      padding      : 2px 10px;
+    }
+
+    table {
+      width          : 100%;
+      border-collapse: collapse;
+      font-size      : 13px;
+    }
+
+    thead th {
+      background   : var(--surface2);
+      border-bottom: 1px solid var(--border);
+      color        : var(--text-dim);
+      font-size    : 11px;
+      font-weight  : 600;
+      letter-spacing: 0.05em;
+      padding      : 0.6rem 0.8rem;
+      text-align   : left;
+      text-transform: uppercase;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition   : background 0.1s;
+    }
+
+    tbody tr:hover   { background: var(--surface2); }
+    tbody tr:last-child { border-bottom: none; }
+
+    tbody td {
+      padding   : 0.65rem 0.8rem;
+      color     : var(--text);
+      vertical-align: middle;
+    }
+
+    .mesh-id {
+      font-family: var(--font-mono);
+      font-size  : 12px;
+      color      : var(--accent);
+    }
+
+    .score-bar {
+      display     : flex;
+      align-items : center;
+      gap         : 0.5rem;
+    }
+
+    .score-track {
+      background   : var(--surface2);
+      border-radius: 3px;
+      height       : 4px;
+      width        : 60px;
+      overflow     : hidden;
+    }
+
+    .score-fill {
+      background   : var(--green);
+      border-radius : 3px;
+      height        : 100%;
+    }
+
+    .score-num {
+      color    : var(--text-dim);
+      font-size: 12px;
+    }
+
+    .type-badge {
+      border-radius: 4px;
+      font-size    : 11px;
+      font-weight  : 600;
+      padding      : 2px 7px;
+    }
+
+    .type-chem {
+      background: var(--chem-bg);
+      color     : var(--chem-text);
+    }
+
+    .type-dis {
+      background: var(--dis-bg);
+      color     : var(--dis-text);
+    }
+
+    /* ── LEGEND ───────────────────────────────────────────────── */
+    .legend {
+      display    : flex;
+      gap        : 1rem;
+      margin-top : 0.75rem;
+      font-size  : 12px;
+      color      : var(--text-dim);
+      align-items: center;
+    }
+
+    .legend-item { display: flex; align-items: center; gap: 0.4rem; }
+
+    /* ── EMPTY STATE ──────────────────────────────────────────── */
+    #empty-state {
+      display   : none;
+      text-align: center;
+      padding   : 2rem;
+      color     : var(--text-dim);
+      font-size : 14px;
+      background: var(--surface);
+      border    : 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    /* ── ERROR ────────────────────────────────────────────────── */
+    #error-msg {
+      display      : none;
+      background   : #2d1010;
+      border       : 1px solid #6b2020;
+      border-radius: var(--radius);
+      color        : #ff8080;
+      font-size    : 13px;
+      margin-top   : 0.75rem;
+      padding      : 0.75rem 1rem;
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-tag">Clinical NLP Tool</div>
+    <h1>Clinical Entity Linker</h1>
+    <p>Paste a doctor's note to identify medical entities and map them to MESH concept IDs.</p>
+  </header>
+
+  <!-- INPUT -->
+  <div class="input-section">
+    <label class="input-label" for="note-input">Clinical Note</label>
+    <textarea
+      id="note-input"
+      placeholder="Paste a clinical note here — e.g. 'Patient presents with hypertension and was prescribed clonidine...'"
+    ></textarea>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="analyseNote()">Analyse Note</button>
+      <button class="btn btn-secondary" onclick="clearAll()">Clear</button>
+    </div>
+
+    <div class="examples">
+      <span>Try an example:</span>
+      <button class="example-btn" onclick="loadExample(0)">Hypertension</button>
+      <button class="example-btn" onclick="loadExample(1)">Cardiac</button>
+      <button class="example-btn" onclick="loadExample(2)">Neurology</button>
+    </div>
+
+    <div id="error-msg"></div>
+  </div>
+
+  <!-- LOADER -->
+  <div id="loader">
+    <div class="spinner"></div>
+    <span>Analysing note...</span>
+  </div>
+
+  <!-- HIGHLIGHTED TEXT -->
+  <div id="highlighted-section">
+    <div class="section-label">Highlighted Entities</div>
+    <div id="highlighted-text"></div>
+    <div class="legend">
+      <div class="legend-item">
+        <span class="ent-chem">■</span> Chemical
+      </div>
+      <div class="legend-item">
+        <span class="ent-dis">■</span> Disease
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS TABLE -->
+  <div id="results-section">
+    <div class="results-header">
+      <div class="section-label">Linked Entities</div>
+      <span class="count-badge" id="count-badge">0 entities</span>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Span</th>
+          <th>Type</th>
+          <th>MESH ID</th>
+          <th>MESH Name</th>
+          <th>Confidence</th>
+        </tr>
+      </thead>
+      <tbody id="results-body"></tbody>
+    </table>
+  </div>
+
+  <!-- EMPTY STATE -->
+  <div id="empty-state">
+    No medical entities found in this note. Try a note with disease or chemical mentions.
+  </div>
+
+</div>
+
+<script>
+  // ── EXAMPLE NOTES ─────────────────────────────────────────────
+  const EXAMPLES = [
+    `Patient is a 58-year-old male with a history of hypertension and depression. He was prescribed clonidine for blood pressure control. He also reported episodes of cardiac arrest last year. Current medications include naloxone and lidocaine.`,
+
+    `A 45-year-old female presented with bradycardia and hypotension following an overdose of clonidine. She was treated with naloxone. ECG showed signs of cardiac asystole. Suxamethonium was administered prior to intubation.`,
+
+    `Patient reports severe depression and anxiety. Prescribed lidocaine infusion for chronic pain management. History of hypertensive disorder and cardiac arrhythmia. Previously treated with alpha-methyldopa.`
+  ];
+
+  function loadExample(idx) {
+    document.getElementById('note-input').value = EXAMPLES[idx];
+    clearResults();
+  }
+
+  // ── ANALYSE ───────────────────────────────────────────────────
+  async function analyseNote() {
+    const text = document.getElementById('note-input').value.trim();
+    if (!text) {
+      showError('Please enter a clinical note first.');
+      return;
+    }
+
+    clearResults();
+    showLoader(true);
+    hideError();
+
+    try {
+      const response = await fetch('/analyse', {
+        method : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body   : JSON.stringify({ text })
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        showError('Error: ' + data.error);
+        return;
+      }
+
+      renderResults(text, data.entities);
+
+    } catch (err) {
+      showError('Could not connect to the server. Make sure Flask is running.');
+    } finally {
+      showLoader(false);
+    }
+  }
+
+  // ── RENDER RESULTS ────────────────────────────────────────────
+  function renderResults(text, entities) {
+    if (entities.length === 0) {
+      document.getElementById('empty-state').style.display = 'block';
+      return;
+    }
+
+    // Highlighted text
+    let highlighted = '';
+    let cursor = 0;
+    // Sort entities by char_start to process in order
+    const sorted = [...entities].sort((a, b) => a.char_start - b.char_start);
+
+    for (const ent of sorted) {
+      // Add plain text before this entity
+      highlighted += escapeHtml(text.slice(cursor, ent.char_start));
+      // Add highlighted entity
+      const cls      = ent.type === 'Chemical' ? 'ent-chem' : 'ent-dis';
+      const labelTxt = ent.type === 'Chemical' ? 'CHEM' : 'DIS';
+      highlighted += `<span class="${cls}" title="${ent.mesh_id} — ${ent.mesh_name}">
+        ${escapeHtml(ent.span)}<span class="ent-label">${labelTxt}</span>
+      </span>`;
+      cursor = ent.char_end;
+    }
+    // Remaining text
+    highlighted += escapeHtml(text.slice(cursor));
+
+    document.getElementById('highlighted-text').innerHTML = highlighted;
+    document.getElementById('highlighted-section').style.display = 'block';
+
+    // Results table
+    const tbody = document.getElementById('results-body');
+    tbody.innerHTML = '';
+
+    for (const ent of sorted) {
+      const typeCls  = ent.type === 'Chemical' ? 'type-chem' : 'type-dis';
+      const scoreW   = Math.round(ent.score * 100);
+      const tr       = document.createElement('tr');
+      tr.innerHTML   = `
+        <td><strong>${escapeHtml(ent.span)}</strong></td>
+        <td><span class="type-badge ${typeCls}">${ent.type}</span></td>
+        <td><span class="mesh-id">${ent.mesh_id}</span></td>
+        <td>${escapeHtml(ent.mesh_name)}</td>
+        <td>
+          <div class="score-bar">
+            <div class="score-track">
+              <div class="score-fill" style="width:${scoreW}%"></div>
+            </div>
+            <span class="score-num">${ent.score}</span>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    }
+
+    document.getElementById('count-badge').textContent =
+      `${entities.length} ${entities.length === 1 ? 'entity' : 'entities'}`;
+    document.getElementById('results-section').style.display = 'block';
+  }
+
+  // ── HELPERS ───────────────────────────────────────────────────
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function showLoader(show) {
+    document.getElementById('loader').style.display = show ? 'flex' : 'none';
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('error-msg');
+    el.textContent  = msg;
+    el.style.display = 'block';
+  }
+
+  function hideError() {
+    document.getElementById('error-msg').style.display = 'none';
+  }
+
+  function clearResults() {
+    document.getElementById('highlighted-section').style.display = 'none';
+    document.getElementById('results-section').style.display     = 'none';
+    document.getElementById('empty-state').style.display         = 'none';
+    document.getElementById('results-body').innerHTML            = '';
+    document.getElementById('highlighted-text').innerHTML        = '';
+    hideError();
+  }
+
+  function clearAll() {
+    document.getElementById('note-input').value = '';
+    clearResults();
+  }
+
+  // Allow Ctrl+Enter to submit
+  document.getElementById('note-input').addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.key === 'Enter') analyseNote();
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+{
+  "model_path": "C:\\Users\\hp\\Desktop\\med\\biobert_ner_v2_new",
+  "mesh_embed_path": "C:\\Users\\hp\\Desktop\\med\\mesh_embeddings.pkl",
+  "mesh_dict_path": "C:\\Users\\hp\\Desktop\\med\\mesh_dict.pkl"
+}
