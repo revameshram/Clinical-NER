@@ -11,6 +11,8 @@ import numpy as np
 from flask import Flask, render_template, request, jsonify
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 from sentence_transformers import SentenceTransformer
+import re
+
 
 # ── APP SETUP ────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -61,6 +63,24 @@ mesh_names      = embed_data['mesh_names']
 mesh_embeddings = embed_data['mesh_embeddings']
 
 print("All models loaded — Flask is ready!\n")
+
+
+STOP_SUFFIXES = [' of', ' the', ' a', ' an', ' and', ' or', ' was', ' is',
+                 ' were', ' has', ' had', ' with', ' for', ' to', ' in']
+
+def clean_span(text):
+    """Remove trailing stop words and punctuation from span."""
+    # Split on sentence-ending punctuation
+    text = re.split(r'[.!?;]', text)[0].strip()
+    # Remove trailing stop words
+    changed = True
+    while changed:
+        changed = False
+        for suffix in STOP_SUFFIXES:
+            if text.lower().endswith(suffix):
+                text = text[:len(text)-len(suffix)].strip()
+                changed = True
+    return text.strip(' ,')
 
 
 # ── LINKER FUNCTION ───────────────────────────────────────────────
@@ -150,7 +170,7 @@ def run_pipeline(text):
         if label.startswith('B-'):
             if current_start is not None:
                 spans.append({
-                    'text': text[current_start:current_end].strip(),
+                    'text': clean_span(text[current_start:current_end].strip()),
                     'type': current_type,
                     'char_start': current_start,
                     'char_end'  : current_end
@@ -158,12 +178,12 @@ def run_pipeline(text):
             current_start = wt['char_start']
             current_end   = wt['char_end']
             current_type  = label[2:]
-        elif label.startswith('I-') and current_start is not None:
+        elif label.startswith('I-') and current_start is not None and label[2:] == current_type:
             current_end = wt['char_end']
         else:
             if current_start is not None:
                 spans.append({
-                    'text': text[current_start:current_end].strip(),
+                    'text': clean_span(text[current_start:current_end].strip()),
                     'type': current_type,
                     'char_start': current_start,
                     'char_end'  : current_end
@@ -174,7 +194,7 @@ def run_pipeline(text):
 
     if current_start is not None:
         spans.append({
-            'text': text[current_start:current_end].strip(),
+            'text': clean_span(text[current_start:current_end].strip()),
             'type': current_type,
             'char_start': current_start,
             'char_end'  : current_end
@@ -196,8 +216,19 @@ def run_pipeline(text):
             'score'     : top_match['score']
         })
 
-    return results
+    # Remove empty spans after cleaning
+    results = [r for r in results if r['score'] >= 0.5 and len(r['span']) > 2]
 
+    # Override known chemicals misclassified as Disease
+    KNOWN_CHEMICALS = {'clonidine', 'naloxone', 'metformin', 'lisinopril',
+                       'aspirin', 'heparin', 'warfarin', 'insulin', 'morphine',
+                       'suxamethonium', 'atropine', 'dopamine', 'epinephrine'}
+
+    for r in results:
+        if r['span'].lower().rstrip('.') in KNOWN_CHEMICALS:
+            r['type'] = 'Chemical'
+
+    return results
 
 # ── ROUTES ───────────────────────────────────────────────────────
 @app.route('/')
